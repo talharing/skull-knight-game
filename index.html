@@ -47,6 +47,16 @@
     <script>
         let scene, camera, renderer, player, enemies = [], keys = {}, gameOver = false;
 
+        function autoScaleModel(model, targetSize) {
+            const box = new THREE.Box3().setFromObject(model);
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = targetSize / maxDim;
+            model.scale.set(scale, scale, scale);
+            console.log(`Model scaled to ${scale} (original max dimension: ${maxDim})`);
+            return model;
+        }
+
         function initGame() {
             scene = new THREE.Scene();
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -87,16 +97,15 @@
                 'https://raw.githubusercontent.com/talharing/skull-knight-game/main/skull_knight.glb',
                 (gltf) => {
                     player = gltf.scene;
-                    player.scale.set(1, 1, 1);
+                    autoScaleModel(player, 1); // Target size: 1 unit
                     player.position.set(0, 0.5, 0);
                     scene.add(player);
-                    updateCamera(); // Set camera immediately after player loads
-                    console.log('Skull Knight loaded');
+                    updateCamera();
+                    console.log('Skull Knight loaded and scaled');
                 },
                 undefined,
                 (error) => {
                     console.error('Error loading knight:', error);
-                    // Fallback player
                     const geometry = new THREE.BoxGeometry(1, 1, 1);
                     const material = new THREE.MeshBasicMaterial({ color: 0x0000ff });
                     player = new THREE.Mesh(geometry, material);
@@ -112,14 +121,23 @@
                     'https://raw.githubusercontent.com/talharing/skull-knight-game/main/human_skull.glb',
                     (gltf) => {
                         const enemy = gltf.scene;
-                        enemy.scale.set(0.5, 0.5, 0.5);
-                        enemy.position.set(Math.random() * 50 - 25, 0.5, Math.random() * 50 - 25);
+                        autoScaleModel(enemy, 0.5); // Target size: 0.5 units
+                        enemy.position.set(Math.random() * 50 - 25, 0.25, Math.random() * 50 - 25);
                         enemies.push(enemy);
                         scene.add(enemy);
-                        console.log(`Enemy skull ${i + 1} loaded`);
+                        console.log(`Enemy skull ${i + 1} loaded and scaled`);
                     },
                     undefined,
-                    (error) => console.error('Error loading skull:', error)
+                    (error) => {
+                        console.error('Error loading skull:', error);
+                        const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+                        const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                        const enemy = new THREE.Mesh(geometry, material);
+                        enemy.position.set(Math.random() * 50 - 25, 0.25, Math.random() * 50 - 25);
+                        enemies.push(enemy);
+                        scene.add(enemy);
+                        console.log(`Fallback enemy ${i + 1} loaded`);
+                    }
                 );
             }
 
@@ -156,10 +174,10 @@
 
         function updateCamera() {
             if (!player) return;
-            const offset = new THREE.Vector3(0, 5, 10); // Behind and above
+            const offset = new THREE.Vector3(0, 5, 10); // Third-person: above and behind
             const playerPos = player.position.clone();
             const cameraPos = playerPos.clone().add(offset);
-            camera.position.lerp(cameraPos, 0.1); // Smooth transition
+            camera.position.lerp(cameraPos, 0.1);
             camera.lookAt(playerPos);
         }
 
@@ -179,10 +197,10 @@
             player.position.set(0, 0.5, 0);
             enemies.forEach(enemy => {
                 if (enemy) {
-                    enemy.position.set(Math.random() * 50 - 25, 0.5, Math.random() * 50 - 25);
+                    enemy.position.set(Math.random() * 50 - 25, 0.25, Math.random() * 50 - 25);
                 }
             });
-            updateCamera(); // Reset camera on restart
+            updateCamera();
         }
 
         window.addEventListener('load', () => {
