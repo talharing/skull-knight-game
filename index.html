@@ -54,16 +54,24 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setClearColor(0x000033);
             document.body.appendChild(renderer.domElement);
+            console.log('Renderer initialized');
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambientLight);
             const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
             directionalLight.position.set(5, 10, 5);
             scene.add(directionalLight);
+            console.log('Lights added');
 
             const textureLoader = new THREE.TextureLoader();
-            const baseTexture = textureLoader.load('https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_base.jpg');
-            const normalTexture = textureLoader.load('https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_normal.jpg');
+            const baseTexture = textureLoader.load(
+                'https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_base.jpg',
+                () => console.log('Base texture loaded')
+            );
+            const normalTexture = textureLoader.load(
+                'https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_normal.jpg',
+                () => console.log('Normal texture loaded')
+            );
             const groundGeometry = new THREE.PlaneGeometry(100, 100);
             const groundMaterial = new THREE.MeshStandardMaterial({
                 map: baseTexture,
@@ -72,6 +80,7 @@
             const ground = new THREE.Mesh(groundGeometry, groundMaterial);
             ground.rotation.x = -Math.PI / 2;
             scene.add(ground);
+            console.log('Ground added');
 
             const loader = new THREE.GLTFLoader();
             loader.load(
@@ -79,12 +88,23 @@
                 (gltf) => {
                     player = gltf.scene;
                     player.scale.set(1, 1, 1);
-                    player.position.y = 0.5;
+                    player.position.set(0, 0.5, 0);
                     scene.add(player);
+                    updateCamera(); // Set camera immediately after player loads
                     console.log('Skull Knight loaded');
                 },
                 undefined,
-                (error) => console.error('Error loading knight:', error)
+                (error) => {
+                    console.error('Error loading knight:', error);
+                    // Fallback player
+                    const geometry = new THREE.BoxGeometry(1, 1, 1);
+                    const material = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+                    player = new THREE.Mesh(geometry, material);
+                    player.position.set(0, 0.5, 0);
+                    scene.add(player);
+                    updateCamera();
+                    console.log('Fallback player loaded');
+                }
             );
 
             for (let i = 0; i < 5; i++) {
@@ -103,9 +123,6 @@
                 );
             }
 
-            camera.position.set(0, 5, 10);
-            camera.lookAt(0, 0, 0);
-
             document.addEventListener('keydown', (event) => keys[event.key.toLowerCase()] = true);
             document.addEventListener('keyup', (event) => keys[event.key.toLowerCase()] = false);
 
@@ -114,7 +131,7 @@
 
         function movePlayer() {
             if (!player || gameOver) return;
-            const speed = 0.2; // Increased for better control
+            const speed = 0.2;
             if (keys['w']) player.position.z -= speed;
             if (keys['s']) player.position.z += speed;
             if (keys['a']) player.position.x -= speed;
@@ -128,9 +145,9 @@
             enemies.forEach(enemy => {
                 if (!enemy) return;
                 const direction = player.position.clone().sub(enemy.position).normalize();
-                enemy.position.add(direction.multiplyScalar(0.02)); // Slower enemy speed (was 0.05)
+                enemy.position.add(direction.multiplyScalar(0.02));
                 const distance = player.position.distanceTo(enemy.position);
-                if (distance < 2) { // Larger collision distance (was 1)
+                if (distance < 2) {
                     gameOver = true;
                     document.getElementById('game-over').style.display = 'block';
                 }
@@ -139,13 +156,11 @@
 
         function updateCamera() {
             if (!player) return;
-            const targetPosition = new THREE.Vector3(
-                player.position.x,
-                player.position.y + 5,
-                player.position.z + 10
-            );
-            camera.position.lerp(targetPosition, 0.1); // Smooth follow
-            camera.lookAt(player.position);
+            const offset = new THREE.Vector3(0, 5, 10); // Behind and above
+            const playerPos = player.position.clone();
+            const cameraPos = playerPos.clone().add(offset);
+            camera.position.lerp(cameraPos, 0.1); // Smooth transition
+            camera.lookAt(playerPos);
         }
 
         function animate() {
@@ -167,6 +182,7 @@
                     enemy.position.set(Math.random() * 50 - 25, 0.5, Math.random() * 50 - 25);
                 }
             });
+            updateCamera(); // Reset camera on restart
         }
 
         window.addEventListener('load', () => {
