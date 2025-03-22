@@ -7,54 +7,63 @@
     <style>
         body { margin: 0; overflow: hidden; }
         canvas { display: block; }
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            color: white;
+            pointer-events: none;
+        }
+        #game-over {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            pointer-events: all;
+        }
+        #game-over button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js" onload="console.log('Three.js loaded')" onerror="console.error('Failed to load Three.js')"></script>
-    <script src="https://unpkg.com/three@0.134.0/examples/js/loaders/GLTFLoader.js" onload="console.log('GLTFLoader loaded')" onerror="console.error('Failed to load GLTFLoader from unpkg')"></script>
+    <div id="ui">
+        <div id="game-over">
+            <h1>Game Over</h1>
+            <button onclick="restartGame()">Restart</button>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
     <script>
-        function initGame() {
-            if (typeof THREE === 'undefined') {
-                console.error('Three.js is not loaded');
-                return;
-            }
+        let scene, camera, renderer, player, enemies = [], keys = {}, gameOver = false;
 
-            const scene = new THREE.Scene();
-            const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            const renderer = new THREE.WebGLRenderer();
+        function initGame() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer();
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setClearColor(0x000033);
             document.body.appendChild(renderer.domElement);
-            console.log('Renderer initialized');
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambientLight);
             const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
             directionalLight.position.set(5, 10, 5);
             scene.add(directionalLight);
-            console.log('Lights added');
-
-            // Fallback cube
-            const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-            const cubeMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-            const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
-            cube.position.set(0, 0.5, 0);
-            scene.add(cube);
-            console.log('Fallback cube added');
 
             const textureLoader = new THREE.TextureLoader();
-            const baseTexture = textureLoader.load(
-                'https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_base.jpg',
-                () => console.log('Base texture loaded'),
-                undefined,
-                (error) => console.error('Error loading base texture:', error)
-            );
-            const normalTexture = textureLoader.load(
-                'https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_normal.jpg',
-                () => console.log('Normal texture loaded'),
-                undefined,
-                (error) => console.error('Error loading normal texture:', error)
-            );
+            const baseTexture = textureLoader.load('https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_base.jpg');
+            const normalTexture = textureLoader.load('https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_normal.jpg');
             const groundGeometry = new THREE.PlaneGeometry(100, 100);
             const groundMaterial = new THREE.MeshStandardMaterial({
                 map: baseTexture,
@@ -63,106 +72,112 @@
             const ground = new THREE.Mesh(groundGeometry, groundMaterial);
             ground.rotation.x = -Math.PI / 2;
             scene.add(ground);
-            console.log('Ground added');
 
-            // GLTFLoader-dependent code
-            if (typeof THREE.GLTFLoader !== 'undefined') {
-                const loader = new THREE.GLTFLoader();
-                let player;
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                'https://raw.githubusercontent.com/talharing/skull-knight-game/main/skull_knight.glb',
+                (gltf) => {
+                    player = gltf.scene;
+                    player.scale.set(1, 1, 1);
+                    player.position.y = 0.5;
+                    scene.add(player);
+                    console.log('Skull Knight loaded');
+                },
+                undefined,
+                (error) => console.error('Error loading knight:', error)
+            );
+
+            for (let i = 0; i < 5; i++) {
                 loader.load(
-                    'https://raw.githubusercontent.com/talharing/skull-knight-game/main/skull_knight.glb',
+                    'https://raw.githubusercontent.com/talharing/skull-knight-game/main/human_skull.glb',
                     (gltf) => {
-                        player = gltf.scene;
-                        player.scale.set(1, 1, 1);
-                        player.position.y = 0.5;
-                        scene.add(player);
-                        console.log('Skull Knight loaded');
+                        const enemy = gltf.scene;
+                        enemy.scale.set(0.5, 0.5, 0.5);
+                        enemy.position.set(Math.random() * 50 - 25, 0.5, Math.random() * 50 - 25);
+                        enemies.push(enemy);
+                        scene.add(enemy);
+                        console.log(`Enemy skull ${i + 1} loaded`);
                     },
                     undefined,
-                    (error) => console.error('Error loading knight:', error)
+                    (error) => console.error('Error loading skull:', error)
                 );
-
-                const enemies = [];
-                for (let i = 0; i < 5; i++) {
-                    loader.load(
-                        'https://raw.githubusercontent.com/talharing/skull-knight-game/main/human_skull.glb',
-                        (gltf) => {
-                            const enemy = gltf.scene;
-                            enemy.scale.set(0.5, 0.5, 0.5);
-                            enemy.position.set(Math.random() * 50 - 25, 0.5, Math.random() * 50 - 25);
-                            enemies.push(enemy);
-                            scene.add(enemy);
-                            console.log(`Enemy skull ${i + 1} loaded`);
-                        },
-                        undefined,
-                        (error) => console.error('Error loading skull:', error)
-                    );
-                }
-
-                const keys = {};
-                document.addEventListener('keydown', (event) => keys[event.key.toLowerCase()] = true);
-                document.addEventListener('keyup', (event) => keys[event.key.toLowerCase()] = false);
-
-                function movePlayer() {
-                    if (!player) return;
-                    const speed = 0.1;
-                    if (keys['w']) player.position.z -= speed;
-                    if (keys['s']) player.position.z += speed;
-                    if (keys['a']) player.position.x -= speed;
-                    if (keys['d']) player.position.x += speed;
-                    player.position.x = Math.max(-50, Math.min(50, player.position.x));
-                    player.position.z = Math.max(-50, Math.min(50, player.position.z));
-                }
-
-                function updateEnemies() {
-                    if (!player) return;
-                    enemies.forEach(enemy => {
-                        if (!enemy) return;
-                        const direction = player.position.clone().sub(enemy.position).normalize();
-                        enemy.position.add(direction.multiplyScalar(0.05));
-                        const distance = player.position.distanceTo(enemy.position);
-                        if (distance < 1) {
-                            alert('Game Over! Refresh to restart.');
-                            enemies.forEach(e => e.position.set(Math.random() * 50 - 25, 0.5, Math.random() * 50 - 25));
-                        }
-                    });
-                }
-
-                function animate() {
-                    requestAnimationFrame(animate);
-                    movePlayer();
-                    updateEnemies();
-                    if (player) {
-                        camera.position.set(player.position.x, 10, player.position.z + 15);
-                        camera.lookAt(player.position);
-                    } else {
-                        camera.position.set(0, 10, 15);
-                        camera.lookAt(0, 0, 0);
-                    }
-                    renderer.render(scene, camera);
-                }
-                animate();
-            } else {
-                console.warn('GLTFLoader not loaded, running with basic scene');
-                camera.position.set(0, 10, 15);
-                camera.lookAt(0, 0, 0);
-                function animate() {
-                    requestAnimationFrame(animate);
-                    renderer.render(scene, camera);
-                }
-                animate();
             }
 
-            window.addEventListener('resize', () => {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.position.set(0, 5, 10);
+            camera.lookAt(0, 0, 0);
+
+            document.addEventListener('keydown', (event) => keys[event.key.toLowerCase()] = true);
+            document.addEventListener('keyup', (event) => keys[event.key.toLowerCase()] = false);
+
+            animate();
+        }
+
+        function movePlayer() {
+            if (!player || gameOver) return;
+            const speed = 0.2; // Increased for better control
+            if (keys['w']) player.position.z -= speed;
+            if (keys['s']) player.position.z += speed;
+            if (keys['a']) player.position.x -= speed;
+            if (keys['d']) player.position.x += speed;
+            player.position.x = Math.max(-50, Math.min(50, player.position.x));
+            player.position.z = Math.max(-50, Math.min(50, player.position.z));
+        }
+
+        function updateEnemies() {
+            if (!player || gameOver) return;
+            enemies.forEach(enemy => {
+                if (!enemy) return;
+                const direction = player.position.clone().sub(enemy.position).normalize();
+                enemy.position.add(direction.multiplyScalar(0.02)); // Slower enemy speed (was 0.05)
+                const distance = player.position.distanceTo(enemy.position);
+                if (distance < 2) { // Larger collision distance (was 1)
+                    gameOver = true;
+                    document.getElementById('game-over').style.display = 'block';
+                }
+            });
+        }
+
+        function updateCamera() {
+            if (!player) return;
+            const targetPosition = new THREE.Vector3(
+                player.position.x,
+                player.position.y + 5,
+                player.position.z + 10
+            );
+            camera.position.lerp(targetPosition, 0.1); // Smooth follow
+            camera.lookAt(player.position);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!gameOver) {
+                movePlayer();
+                updateEnemies();
+                updateCamera();
+            }
+            renderer.render(scene, camera);
+        }
+
+        function restartGame() {
+            gameOver = false;
+            document.getElementById('game-over').style.display = 'none';
+            player.position.set(0, 0.5, 0);
+            enemies.forEach(enemy => {
+                if (enemy) {
+                    enemy.position.set(Math.random() * 50 - 25, 0.5, Math.random() * 50 - 25);
+                }
             });
         }
 
         window.addEventListener('load', () => {
-            console.log('Window loaded, checking scripts...');
-            setTimeout(initGame, 500);
+            console.log('Window loaded, starting game...');
+            initGame();
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         });
     </script>
 </body>
