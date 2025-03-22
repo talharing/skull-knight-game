@@ -20,7 +20,7 @@
             color: white;
             pointer-events: none;
         }
-        #game-over {
+        #game-over, #win-screen {
             background: rgba(0, 0, 0, 0.8);
             padding: 20px;
             border-radius: 10px;
@@ -28,24 +28,37 @@
             display: none;
             pointer-events: all;
         }
-        #game-over button {
+        #game-over button, #win-screen button {
             padding: 10px 20px;
             font-size: 16px;
             cursor: pointer;
+            margin: 5px;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 20px;
         }
     </style>
 </head>
 <body>
     <div id="ui">
+        <div id="score">Score: 0</div>
         <div id="game-over">
             <h1>Game Over</h1>
             <button onclick="restartGame()">Restart</button>
+        </div>
+        <div id="win-screen">
+            <h1>You Win!</h1>
+            <button onclick="restartGame()">Play Again</button>
+            <button onclick="window.close()">Quit</button>
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/loaders/GLTFLoader.js"></script>
     <script>
-        let scene, camera, renderer, player, enemies = [], keys = {}, gameOver = false;
+        let scene, camera, renderer, player, enemies = [], keys = {}, gameOver = false, score = 0, explosions = [];
 
         function autoScaleModel(model, targetSize) {
             const box = new THREE.Box3().setFromObject(model);
@@ -53,36 +66,32 @@
             const maxDim = Math.max(size.x, size.y, size.z);
             const scale = targetSize / maxDim;
             model.scale.set(scale, scale, scale);
-            console.log(`Model scaled to ${scale} (original max dimension: ${maxDim})`);
             return model;
         }
 
         function initGame() {
             scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
             renderer = new THREE.WebGLRenderer();
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setClearColor(0x000033);
             document.body.appendChild(renderer.domElement);
-            console.log('Renderer initialized');
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambientLight);
             const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
             directionalLight.position.set(5, 10, 5);
             scene.add(directionalLight);
-            console.log('Lights added');
 
+            // Tiled ground (10x10 tiles, 100x100 grid)
             const textureLoader = new THREE.TextureLoader();
-            const baseTexture = textureLoader.load(
-                'https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_base.jpg',
-                () => console.log('Base texture loaded')
-            );
-            const normalTexture = textureLoader.load(
-                'https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_normal.jpg',
-                () => console.log('Normal texture loaded')
-            );
-            const groundGeometry = new THREE.PlaneGeometry(100, 100);
+            const baseTexture = textureLoader.load('https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_base.jpg');
+            const normalTexture = textureLoader.load('https://raw.githubusercontent.com/talharing/skull-knight-game/main/sand_rocks_normal.jpg');
+            baseTexture.wrapS = baseTexture.wrapT = THREE.RepeatWrapping;
+            normalTexture.wrapS = normalTexture.wrapT = THREE.RepeatWrapping;
+            baseTexture.repeat.set(100, 100);
+            normalTexture.repeat.set(100, 100);
+            const groundGeometry = new THREE.PlaneGeometry(1000, 1000); // Much bigger
             const groundMaterial = new THREE.MeshStandardMaterial({
                 map: baseTexture,
                 normalMap: normalTexture
@@ -90,18 +99,17 @@
             const ground = new THREE.Mesh(groundGeometry, groundMaterial);
             ground.rotation.x = -Math.PI / 2;
             scene.add(ground);
-            console.log('Ground added');
 
             const loader = new THREE.GLTFLoader();
             loader.load(
                 'https://raw.githubusercontent.com/talharing/skull-knight-game/main/skull_knight.glb',
                 (gltf) => {
                     player = gltf.scene;
-                    autoScaleModel(player, 1); // Target size: 1 unit
+                    autoScaleModel(player, 1);
                     player.position.set(0, 0.5, 0);
+                    player.rotation.y = Math.PI; // Back to camera
                     scene.add(player);
                     updateCamera();
-                    console.log('Skull Knight loaded and scaled');
                 },
                 undefined,
                 (error) => {
@@ -110,9 +118,9 @@
                     const material = new THREE.MeshBasicMaterial({ color: 0x0000ff });
                     player = new THREE.Mesh(geometry, material);
                     player.position.set(0, 0.5, 0);
+                    player.rotation.y = Math.PI;
                     scene.add(player);
                     updateCamera();
-                    console.log('Fallback player loaded');
                 }
             );
 
@@ -121,11 +129,10 @@
                     'https://raw.githubusercontent.com/talharing/skull-knight-game/main/human_skull.glb',
                     (gltf) => {
                         const enemy = gltf.scene;
-                        autoScaleModel(enemy, 0.5); // Target size: 0.5 units
-                        enemy.position.set(Math.random() * 50 - 25, 0.25, Math.random() * 50 - 25);
-                        enemies.push(enemy);
+                        autoScaleModel(enemy, 0.5);
+                        enemy.position.set(Math.random() * 500 - 250, 0.25, Math.random() * 500 - 250);
                         scene.add(enemy);
-                        console.log(`Enemy skull ${i + 1} loaded and scaled`);
+                        enemies.push(enemy);
                     },
                     undefined,
                     (error) => {
@@ -133,16 +140,16 @@
                         const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
                         const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
                         const enemy = new THREE.Mesh(geometry, material);
-                        enemy.position.set(Math.random() * 50 - 25, 0.25, Math.random() * 50 - 25);
+                        enemy.position.set(Math.random() * 500 - 250, 0.25, Math.random() * 500 - 250);
                         enemies.push(enemy);
                         scene.add(enemy);
-                        console.log(`Fallback enemy ${i + 1} loaded`);
                     }
                 );
             }
 
             document.addEventListener('keydown', (event) => keys[event.key.toLowerCase()] = true);
             document.addEventListener('keyup', (event) => keys[event.key.toLowerCase()] = false);
+            document.addEventListener('click', handleSwordAttack);
 
             animate();
         }
@@ -154,8 +161,8 @@
             if (keys['s']) player.position.z += speed;
             if (keys['a']) player.position.x -= speed;
             if (keys['d']) player.position.x += speed;
-            player.position.x = Math.max(-50, Math.min(50, player.position.x));
-            player.position.z = Math.max(-50, Math.min(50, player.position.z));
+            player.position.x = Math.max(-500, Math.min(500, player.position.x));
+            player.position.z = Math.max(-500, Math.min(500, player.position.z));
         }
 
         function updateEnemies() {
@@ -164,6 +171,7 @@
                 if (!enemy) return;
                 const direction = player.position.clone().sub(enemy.position).normalize();
                 enemy.position.add(direction.multiplyScalar(0.02));
+                enemy.lookAt(player.position); // Face player
                 const distance = player.position.distanceTo(enemy.position);
                 if (distance < 2) {
                     gameOver = true;
@@ -172,9 +180,48 @@
             });
         }
 
+        function handleSwordAttack() {
+            if (!player || gameOver) return;
+            const explosionGeometry = new THREE.SphereGeometry(2, 16, 16);
+            const explosionMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5 });
+            const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
+            explosion.position.copy(player.position);
+            scene.add(explosion);
+            explosions.push({ mesh: explosion, time: 0 });
+
+            enemies = enemies.filter(enemy => {
+                if (!enemy) return false;
+                const distance = enemy.position.distanceTo(player.position);
+                if (distance < 3) { // Explosion radius
+                    scene.remove(enemy);
+                    score += 1;
+                    document.getElementById('score').textContent = `Score: ${score}`;
+                    if (score >= 10) {
+                        gameOver = true;
+                        document.getElementById('win-screen').style.display = 'block';
+                    }
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        function updateExplosions() {
+            explosions = explosions.filter(explosion => {
+                explosion.time += 0.1;
+                explosion.mesh.scale.setScalar(1 + explosion.time);
+                explosion.mesh.material.opacity = 0.5 - explosion.time * 0.5;
+                if (explosion.time > 1) {
+                    scene.remove(explosion.mesh);
+                    return false;
+                }
+                return true;
+            });
+        }
+
         function updateCamera() {
             if (!player) return;
-            const offset = new THREE.Vector3(0, 5, 10); // Third-person: above and behind
+            const offset = new THREE.Vector3(0, 5, 10);
             const playerPos = player.position.clone();
             const cameraPos = playerPos.clone().add(offset);
             camera.position.lerp(cameraPos, 0.1);
@@ -186,6 +233,7 @@
             if (!gameOver) {
                 movePlayer();
                 updateEnemies();
+                updateExplosions();
                 updateCamera();
             }
             renderer.render(scene, camera);
@@ -193,13 +241,26 @@
 
         function restartGame() {
             gameOver = false;
+            score = 0;
+            document.getElementById('score').textContent = `Score: ${score}`;
             document.getElementById('game-over').style.display = 'none';
+            document.getElementById('win-screen').style.display = 'none';
             player.position.set(0, 0.5, 0);
-            enemies.forEach(enemy => {
-                if (enemy) {
-                    enemy.position.set(Math.random() * 50 - 25, 0.25, Math.random() * 50 - 25);
-                }
-            });
+            enemies.forEach(enemy => scene.remove(enemy));
+            enemies = [];
+            const loader = new THREE.GLTFLoader();
+            for (let i = 0; i < 5; i++) {
+                loader.load(
+                    'https://raw.githubusercontent.com/talharing/skull-knight-game/main/human_skull.glb',
+                    (gltf) => {
+                        const enemy = gltf.scene;
+                        autoScaleModel(enemy, 0.5);
+                        enemy.position.set(Math.random() * 500 - 250, 0.25, Math.random() * 500 - 250);
+                        scene.add(enemy);
+                        enemies.push(enemy);
+                    }
+                );
+            }
             updateCamera();
         }
 
