@@ -10,13 +10,17 @@
     </style>
 </head>
 <body>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js" onload="console.log('Three.js loaded')" onerror="console.error('Failed to load Three.js')"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/examples/js/loaders/GLTFLoader.js" onload="console.log('GLTFLoader loaded')" onerror="console.error('Failed to load GLTFLoader')"></script>
     <script>
-        // Wait for GLTFLoader to load
-        window.addEventListener('load', () => {
+        // Function to initialize the game
+        function initGame() {
+            if (typeof THREE === 'undefined') {
+                console.error('Three.js is not loaded');
+                return;
+            }
             if (typeof THREE.GLTFLoader === 'undefined') {
-                console.error('GLTFLoader not loaded. Check script source or network.');
+                console.error('GLTFLoader is not available. Check CDN or script load.');
                 return;
             }
 
@@ -26,6 +30,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setClearColor(0x000033);
             document.body.appendChild(renderer.domElement);
+            console.log('Renderer initialized');
 
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambientLight);
@@ -120,12 +125,19 @@
                 renderer.render(scene, camera);
             }
             animate();
+            console.log('Game loop started');
 
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
                 renderer.setSize(window.innerWidth, window.innerHeight);
             });
+        }
+
+        // Check and run after scripts load
+        window.addEventListener('load', () => {
+            console.log('Window loaded, checking scripts...');
+            setTimeout(initGame, 500); // Small delay to ensure scripts are parsed
         });
     </script>
 </body>
